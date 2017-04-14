@@ -16,6 +16,7 @@ int phasePeriod;
 
 int Ud;
 double T;
+double microT;
 
 double M;
 int valueMpin;
@@ -23,40 +24,47 @@ int valueMpin;
 double w;
 int firstRotorSensorTime, lastRotorSensorTime;
 
-const double Lm = 0.4472135955;
-const double Ls = 2;
-const double Lr = 0.1;
-const double Tr = 0.0995;
+const double Lm = 0.000145;
+const double Ls = 0.000144;
+const double Lr = 0.000146;
+const double Tr = 0.00073;
 const double Rr = 0.2;
-const double Rs = 0.1; 
+const double Rs = 2.4; 
 const double sigma = 0.7;
 const double tau = 0.000001;
-const double e = 0.000001;
+const double e = 0.1;
 
 double psi;
 
 double I0[2];
 double u[2][12];
 
-void nextPhase(){  
-  disableAllPhasePin();
-  phase++;
-  switch(phase){
-    case A_PHASE:
-      analogWrite(A_PHASE_PIN, Ud);
-      break;
-    case B_PHASE:
-      analogWrite(B_PHASE_PIN, Ud);
-      break;
-    case C_PHASE:
-      analogWrite(C_PHASE_PIN, Ud);
-      break;
-    default:
-      phase = -1;
-      break;  
+boolean isServeU;
+
+void nextPhase(){ 
+  disableAllPhasePin(); 
+  if (isServeU){   
+    Timer4.setPeriod(phasePeriod - microT).start();
+    isServeU = false;
   }
-  
-  Timer4.setPeriod(phasePeriod).start();
+  else{    
+    phase++;
+    switch(phase){
+      case A_PHASE:
+        analogWrite(A_PHASE_PIN, Ud);
+        phase = -1;
+        break;
+      case B_PHASE:
+        analogWrite(B_PHASE_PIN, Ud);
+        break;
+      case C_PHASE:
+        analogWrite(C_PHASE_PIN, Ud);
+        break;
+    }
+
+    isServeU = true;
+    Timer4.setPeriod(microT).start();
+  }
 }
 
 void disableAllPhasePin(){
@@ -69,11 +77,13 @@ void rotorSensorInterrupt(){
   lastRotorSensorTime = millis();
   double rotorSensorPeriodMilli = lastRotorSensorTime - firstRotorSensorTime;
   double rotorSensorPeriod = rotorSensorPeriodMilli / 1000;
-//  w = 2 * M_PI / rotorSensorPeriod;
+  //w = 2 * M_PI / rotorSensorPeriod;
   firstRotorSensorTime = lastRotorSensorTime;
 
-  w = 10;
-  M = 0.001;
+  w = 1.5;
+//  double analogM = analogRead(M_PIN);
+//  M = analogM / 1000000;
+  M = 0.00001;
   CalculateUdT();
 }
 
@@ -100,8 +110,10 @@ void CalculateUdT()
 
   SearchLastStep();
   
-  double UdTmp = GetUd();
-  Serial.println(UdTmp, 20);
+//  microT = 1000000000 * T;
+//  
+//  double UdValue = GetUd();
+//  Ud = GetAnalogUd(UdValue);
 }
 
 double GetEcsponentPsi()
@@ -249,6 +261,16 @@ double GetUd()
   return u11 + u12 + u13;
 }
 
+int GetAnalogUd(double udValue)
+{
+  int maxU = 12;
+  int maxAnalogU = 255;
+  if (udValue > maxU){
+    return maxAnalogU;
+  }
+  return map((int)udValue, 0, maxU, 0, maxAnalogU);
+}
+
 void setup() {  
   Serial.begin(9600);
   
@@ -256,9 +278,11 @@ void setup() {
   pinMode(B_PHASE_PIN, OUTPUT);
   pinMode(C_PHASE_PIN, OUTPUT);
 
-  phase = A_PHASE;
-  Ud = 255;
-  phasePeriod = 50000;
+  phase = -1;
+  Ud = GetAnalogUd(9);
+  isServeU = false;
+  phasePeriod = 232710;
+  microT = 153985;
   Timer4.attachInterrupt(nextPhase).start(phasePeriod);
 
   firstRotorSensorTime = millis();
@@ -266,5 +290,4 @@ void setup() {
 }
 
 void loop() {
-  int a = analogRead(M_PIN);
 }
